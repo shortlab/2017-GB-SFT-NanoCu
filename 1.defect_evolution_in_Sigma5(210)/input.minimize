@@ -1,0 +1,33 @@
+
+#variable  myT equal "300+100*v_a"
+
+
+# ------------------------ INITIALIZATION ----------------------------
+echo both
+units 		metal
+dimension	3
+boundary	p	p	p
+atom_style	atomic
+
+# ----------------------- ATOM DEFINITION ----------------------------
+read_data      dump.data
+
+# ------------------------ FORCE FIELDS ------------------------------
+pair_style      eam/alloy
+pair_coeff      * * /home/jinmiao/projects/lammps-16Feb16/potentials/Cu01.eam.alloy Cu
+
+
+# ------------------------- SETTINGS ---------------------------------
+thermo 1000                                                                      #output every  100 time steps
+thermo_style custom step dt time press pe ke temp 
+
+compute         peratom all stress/atom NULL
+
+#-------------------------- heating -----------------------------
+minimize     1e-10 1e-10 10000 10000
+
+dump     1 all custom 500000 dump_min.data id type x y z c_peratom[1] c_peratom[2] c_peratom[3]
+dump_modify 1 first yes
+minimize     1e-10 1e-10 0 10000
+
+

@@ -1,0 +1,17 @@
+#######################Directory Description#######################
+
+1. 1.defect_evolution_in_Sigma5(210)
+Evolution snapshot for grain boundary sigma5(210) with spacing 11.4nm
+
+
+2. 2.defect_evolution_in_Sigma5(310)
+Evolution snapshot for grain boundary sigma5(310) with spacing 11.4nm
+
+3. 3.defect_distribution_vs_Spacing
+Atom configuration after each damage cascade for grain boundary sigma5(310) and sigma5(210) with spacing 5.7nm, 11.4nm 17nm, 23nm, 29nm
+
+4. python
+Plot figures
+
+Note:
+Visualization and common neighbor analysis are done with OVITO package

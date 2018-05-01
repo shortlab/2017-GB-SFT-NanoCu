@@ -1,0 +1,126 @@
+log log.GB
+#MMPS Input File for Grain Boundaries 
+# Mark Tschopp, Dec2009 
+# This file will generate numerous input files for LAMMPS 
+# using a large number of grain boundaries 
+
+# ---------- Setup Variables --------------------- 
+variable etol equal 1.0e-25 
+variable ftol equal 1.0e-25 
+variable maxiter equal 5000 
+variable maxeval equal 10000 
+variable latparam equal 3.615
+variable minimumenergy equal -4.122435 
+variable overlapboth equal 1 
+variable gbname index Fe_100STGB1 
+variable  relaxSteps equal 50000
+variable  myT equal 700
+
+# Insert x,y,z sizes in LU and calculate in Angstroms 
+variable xsize1 equal "sqrt(0^2 + 2^2 + 1^2)" 
+variable zsize1 equal "sqrt(1^2 + 0^2 + 0^2)" 
+variable xsize2 equal "sqrt(0^2 + 2^2 + -1^2)" 
+variable zsize2 equal "sqrt(1^2 + 0^2 + 0^2)" 
+if "${xsize1} <= ${xsize2}" then "variable xsize equal ${xsize1}" else "variable xsize equal ${xsize2}" 
+if "${zsize1} <= ${zsize2}" then "variable zsize equal ${zsize1}" else "variable zsize equal ${zsize2}" 
+variable xlen equal "v_xsize * v_latparam" 
+variable zlen equal "v_zsize * v_latparam" 
+         
+          
+           
+# ---------- Define loops for simulation ---------------------  
+variable tx equal 0.0
+variable tz equal 0.0
+variable overlapdist equal 0.03615
+                    
+
+# ---------- Initialize Simulation --------------------- 
+clear 
+units metal 
+dimension 3 
+boundary p p p 
+atom_style atomic 
+
+# ---------- Create Atomistic Structure --------------------- 
+lattice fcc ${latparam} 
+variable halfX equal ${xlen}*7
+variable halfZ equal ${zlen}*16
+region whole block -${halfX} ${halfX} -121.308763 121.308763 -${halfZ} ${halfZ} units box 
+#region whole block 0.000000 6.384672 -121.308763 121.308763 0.000000 2.855312 units box 
+create_box 2 whole 
+region upper block INF INF 0.000000 121.308763 INF INF units box 
+lattice fcc ${latparam} orient x  0  2  1 orient y  0 -1  2 orient z  1  0  0 
+create_atoms 1 region upper 
+region lower block INF INF -121.308763 0.000000 INF INF units box 
+lattice fcc ${latparam} orient x  0  2 -1 orient y  0  1  2 orient z  1  0  0 
+create_atoms 2 region lower 
+group upper type 1 
+group lower type 2  
+
+# ---------- Define Interatomic Potential --------------------- 
+pair_style eam/alloy
+pair_coeff * * /home/jinmiao/projects/lammps-16Feb16/potentials/Cu01.eam.alloy Cu Cu
+neighbor 2.0 bin 
+neigh_modify delay 10 check yes 
+ 
+# ---------- Displace atoms and delete overlapping atoms --------------------- 
+displace_atoms upper move ${tx} 0 ${tz} units lattice 
+delete_atoms overlap ${overlapdist} lower upper
+variable natoms equal "count(all)" 
+print "Present number of atoms: ${natoms}" 
+                  
+# ---------- Define Settings --------------------- 
+compute csym all centro/atom fcc 
+compute eng all pe/atom 
+compute eatoms all reduce sum c_eng 
+
+# ---------- Run Minimization --------------------- 
+reset_timestep 0 
+thermo 500
+thermo_style custom step pe lx ly lz press pxx pyy pzz c_eatoms
+min_style cg 
+minimize ${etol} ${ftol} ${maxiter} ${maxeval} 
+
+# ---------- Run Minimization 2--------------------- 
+# Now allow the box to expand/contract perpendicular to the grain boundary
+reset_timestep 0 
+fix 1 all box/relax aniso 0.0 vmax 0.001
+min_style cg 
+minimize ${etol} ${ftol} ${maxiter} ${maxeval} 
+ 
+unfix 1
+# ---------- Calculate GB Energy --------------------- 
+variable esum equal "v_minimumenergy * count(all)" 
+variable xseng equal "c_eatoms - (v_minimumenergy * count(all))" 
+variable gbarea equal "lx * lz * 2" 
+variable gbe equal "(c_eatoms - (v_minimumenergy * count(all)))/v_gbarea" 
+variable gbemJm2 equal ${gbe}*16021.7733/2 #ev/A^2--->mJ/m^2 (should divided by 2 since GB is periodic in y direction (perpendicular to the GB surface)
+variable gbernd equal round(${gbemJm2}) 
+print "After third minimization:" 
+print "GB energy is ${gbemJm2} mJ/m^2" 
+  
+   
+#-------------------------- Relax at NPT & NVT-------------------------
+reset_timestep	0
+timestep 0.001
+
+velocity       all create ${myT} 74657362 mom yes  
+fix            1  all  npt  temp  ${myT} ${myT} 0.1 iso 0.0 0.0 1.0 drag 1
+run            ${relaxSteps}
+unfix          1
+
+minimize       1e-10 1e-10  10000 10000
+
+fix            1 all nvt temp ${myT} ${myT} 0.1                                 #Relax at 300K
+run            ${relaxSteps}   
+unfix          1
+
+fix            4 all recenter 0.0 0.0 0.0
+run 1
+unfix          4
+
+dump 1 all custom 100000 dump.GB_${gbernd} id type x y z c_csym c_eng 
+minimize       1e-10 1e-10  10000 10000
+write_data     Initial.data
+
+print "All done"
